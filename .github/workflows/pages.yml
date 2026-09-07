@@ -45,7 +45,17 @@ jobs:
             echo "::error::index.html מקשר ל-Artifact פנימי. הפרסום נעצר."
             exit 1
           fi
-          # (3) הקובץ מצהיר על עצמו כניתוב הציבורי
+          # (3) אין בקובץ מצב עריכה — הצופה בקישור הציבורי אינו עורך את הטקסט.
+          # בקונסולה מצב העריכה מוסר **פיזית** ב-build_console.py, ולכן החיפוש הזה
+          # תופס אותו. (בדו״ח הנרטיבי הוא מוסר בזמן ריצה, ולכן הדו״ח לא יעבור את
+          # השער הזה כמו שהוא — לפני פרסום שלו צריך להסירו פיזית באותה דרך.)
+          for leftover in 'id="editToggle"' 'id="editbar"' 'wireEditing'; do
+            if grep -qF "$leftover" index.html; then
+              echo "::error::index.html עדיין מכיל $leftover — מצב העריכה נגיש בקובץ המפורסם."
+              exit 1
+            fi
+          done
+          # (4) הקובץ מצהיר על עצמו כניתוב הציבורי
           grep -qF 'const PUBLIC = true;' index.html || {
             echo "::error::index.html אינו מצהיר על הניתוב הציבורי."
             exit 1
