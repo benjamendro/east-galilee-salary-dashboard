@@ -1,0 +1,62 @@
+# מפרסם את index.html ל-GitHub Pages בכל דחיפה ל-main.
+#
+# הקובץ שמגיע לכאן הוא הגרסה הציבורית של הדשבורד בלבד: אותם נתונים ואותם גרפים,
+# בלי „תובנות” ובלי הגישה אליהן. הגרסה הפנימית לעולם אינה מתפרסמת — ראו השער למטה.
+#
+# הכתובת: https://benjamendro.github.io/east-galilee-salary-dashboard/
+
+name: פרסום הדשבורד
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# פרסום אחד בכל רגע; ריצה חדשה ממתינה ואינה מבטלת פרסום שכבר יצא לדרך
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # השער: רק הגרסה הציבורית עולה לאוויר. הגרסה הפנימית מצהירה
+      # const PUBLIC = false; ואם היא הועתקה לכאן בטעות — הפרסום נעצר כאן.
+      - name: אימות שהקובץ הוא הגרסה הציבורית
+        run: |
+          grep -qF 'const PUBLIC = true;' index.html || {
+            echo "::error::index.html אינו הגרסה הציבורית — התובנות היו נשארות נגישות."
+            exit 1
+          }
+          if grep -qF 'const PUBLIC = false;' index.html; then
+            echo "::error::index.html הוא הגרסה הפנימית, עם התובנות. הפרסום נעצר."
+            exit 1
+          fi
+
+      # לאתר נכנס הדשבורד בלבד — לא ה-README ולא קובצי ה-workflow
+      - name: הרכבת האתר
+        run: |
+          mkdir -p _site
+          cp index.html _site/index.html
+
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
