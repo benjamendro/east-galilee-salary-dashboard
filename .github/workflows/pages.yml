@@ -31,16 +31,27 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # השער: רק הגרסה הציבורית עולה לאוויר. הגרסה הפנימית מצהירה
-      # const PUBLIC = false; ואם היא הועתקה לכאן בטעות — הפרסום נעצר כאן.
-      - name: אימות שהקובץ הוא הגרסה הציבורית
+      # השער: רק הגרסה הציבורית עולה לאוויר, והוא בודק את התכונות עצמן
+      # ולא רק סימון שאפשר לשכוח לעדכן.
+      - name: אימות שהקובץ ראוי לפרסום
         run: |
+          # (1) המטען המוטמע אינו נושא ולו תובנה אחת
+          grep -qF '"insights":[]' index.html || {
+            echo "::error::index.html נושא תובנות במטען — הן דורשות מעבר מומחה ואינן מתפרסמות."
+            exit 1
+          }
+          # (2) אין קישור ל-Artifact פנימי (הדו״ח המלא והתובנות)
+          if grep -qF 'claude.ai/code/artifact' index.html; then
+            echo "::error::index.html מקשר ל-Artifact פנימי. הפרסום נעצר."
+            exit 1
+          fi
+          # (3) הקובץ מצהיר על עצמו כניתוב הציבורי
           grep -qF 'const PUBLIC = true;' index.html || {
-            echo "::error::index.html אינו הגרסה הציבורית — התובנות היו נשארות נגישות."
+            echo "::error::index.html אינו מצהיר על הניתוב הציבורי."
             exit 1
           }
           if grep -qF 'const PUBLIC = false;' index.html; then
-            echo "::error::index.html הוא הגרסה הפנימית, עם התובנות. הפרסום נעצר."
+            echo "::error::index.html הוא הגרסה הפנימית. הפרסום נעצר."
             exit 1
           fi
 
