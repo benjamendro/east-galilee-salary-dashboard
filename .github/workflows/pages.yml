@@ -1,7 +1,9 @@
-# מפרסם את index.html ל-GitHub Pages בכל דחיפה ל-main.
+# מפרסם את האתר ל-GitHub Pages בכל דחיפה ל-main.
 #
-# הקובץ שמגיע לכאן הוא הגרסה הציבורית של הדשבורד בלבד: אותם נתונים ואותם גרפים,
-# בלי „תובנות” ובלי הגישה אליהן. הגרסה הפנימית לעולם אינה מתפרסמת — ראו השער למטה.
+# הקבצים כאן מגיעים אוטומטית מהתיקייה shared/ במאגר הפרטי (sync-to-shared.yml שם),
+# ורק ממנה. index.html הוא הגרסה הציבורית של הדשבורד: אותם נתונים ואותם גרפים, בלי
+# „תובנות” ובלי הגישה אליהן. bot-data/ הוא טבלאות CSV של אותם נתונים, לבוט ה-AI.
+# הגרסה הפנימית לעולם אינה מתפרסמת — ראו השער למטה.
 #
 # הכתובת: https://benjamendro.github.io/east-galilee-salary-dashboard/
 
@@ -33,43 +35,52 @@ jobs:
 
       # השער: רק הגרסה הציבורית עולה לאוויר, והוא בודק את התכונות עצמן
       # ולא רק סימון שאפשר לשכוח לעדכן.
-      - name: אימות שהקובץ ראוי לפרסום
+      - name: אימות שהקבצים ראויים לפרסום
         run: |
-          # (1) המטען המוטמע אינו נושא ולו תובנה אחת
-          grep -qF '"insights":[]' index.html || {
-            echo "::error::index.html נושא תובנות במטען — הן דורשות מעבר מומחה ואינן מתפרסמות."
-            exit 1
-          }
-          # (2) אין קישור ל-Artifact פנימי (הדו״ח המלא והתובנות)
-          if grep -qF 'claude.ai/code/artifact' index.html; then
-            echo "::error::index.html מקשר ל-Artifact פנימי. הפרסום נעצר."
-            exit 1
-          fi
-          # (3) אין בקובץ מצב עריכה — הצופה בקישור הציבורי אינו עורך את הטקסט.
-          # בקונסולה מצב העריכה מוסר **פיזית** ב-build_console.py, ולכן החיפוש הזה
-          # תופס אותו. (בדו״ח הנרטיבי הוא מוסר בזמן ריצה, ולכן הדו״ח לא יעבור את
-          # השער הזה כמו שהוא — לפני פרסום שלו צריך להסירו פיזית באותה דרך.)
-          for leftover in 'id="editToggle"' 'id="editbar"' 'wireEditing'; do
-            if grep -qF "$leftover" index.html; then
-              echo "::error::index.html עדיין מכיל $leftover — מצב העריכה נגיש בקובץ המפורסם."
+          shopt -s globstar nullglob
+          pages=( ./**/*.html )
+          [ ${#pages[@]} -gt 0 ] || { echo "::error::אין אף עמוד HTML לפרסום."; exit 1; }
+          for f in "${pages[@]}"; do
+            # (1) המטען המוטמע אינו נושא ולו תובנה אחת
+            grep -qF '"insights":[]' "$f" || {
+              echo "::error::$f נושא תובנות במטען — הן דורשות מעבר מומחה ואינן מתפרסמות."
+              exit 1
+            }
+            # (3) אין בקובץ מצב עריכה — הצופה בקישור הציבורי אינו עורך את הטקסט.
+            # בקונסולה מצב העריכה מוסר **פיזית** ב-build_console.py, ולכן החיפוש הזה
+            # תופס אותו. (בדו״ח הנרטיבי הוא מוסר בזמן ריצה, ולכן הדו״ח לא יעבור את
+            # השער הזה כמו שהוא — לפני פרסום שלו צריך להסירו פיזית באותה דרך.)
+            for leftover in 'id="editToggle"' 'id="editbar"' 'wireEditing'; do
+              if grep -qF "$leftover" "$f"; then
+                echo "::error::$f עדיין מכיל $leftover — מצב העריכה נגיש בקובץ המפורסם."
+                exit 1
+              fi
+            done
+            # (4) הקובץ מצהיר על עצמו כניתוב הציבורי
+            grep -qF 'const PUBLIC = true;' "$f" || {
+              echo "::error::$f אינו מצהיר על הניתוב הציבורי."
+              exit 1
+            }
+            if grep -qF 'const PUBLIC = false;' "$f"; then
+              echo "::error::$f הוא הגרסה הפנימית. הפרסום נעצר."
               exit 1
             fi
           done
-          # (4) הקובץ מצהיר על עצמו כניתוב הציבורי
-          grep -qF 'const PUBLIC = true;' index.html || {
-            echo "::error::index.html אינו מצהיר על הניתוב הציבורי."
-            exit 1
-          }
-          if grep -qF 'const PUBLIC = false;' index.html; then
-            echo "::error::index.html הוא הגרסה הפנימית. הפרסום נעצר."
+          # (2) אין קישור ל-Artifact פנימי (הדו״ח המלא והתובנות), בשום קובץ שמתפרסם
+          if grep -rIlF --exclude-dir=.git --exclude-dir=.github 'claude.ai/code/artifact' . \
+             || grep -rIlF --exclude-dir=.git --exclude-dir=.github 'claude.ai/artifact' .; then
+            echo "::error::קובץ מקשר ל-Artifact פנימי. הפרסום נעצר."
             exit 1
           fi
 
-      # לאתר נכנס הדשבורד בלבד — לא ה-README ולא קובצי ה-workflow
+      # לאתר נכנס כל מה שהגיע מ-shared/ (index.html, bot-data/ …) — לא ה-README,
+      # לא קובצי ה-workflow ולא version.json, שהם של המאגר ולא של האתר.
       - name: הרכבת האתר
         run: |
           mkdir -p _site
-          cp index.html _site/index.html
+          tar --exclude=./.git --exclude=./.github --exclude=./_site \
+              --exclude=./README.md --exclude=./version.json -cf - . | tar -xf - -C _site
+          echo "Published files:"; (cd _site && find . -type f | sort)
 
       # Pages מופעל פעם אחת ידנית: Settings → Pages → Source: GitHub Actions.
       # אין כאן enablement: true — ה-GITHUB_TOKEN אינו רשאי ליצור אתר Pages
