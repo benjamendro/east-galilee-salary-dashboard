@@ -401,6 +401,10 @@ table.d tr:hover td{background:var(--bg-hover)}
 
 /* יעדי מגע ≥40px ב-≤600px גם לכפתורי מיון בכותרות טבלה ולבוררים הקטנים בתוך פאנל (סבב פרטים, QA 09/11/2026) */
 @media (max-width:600px){ th button, .seg.sm button, .seg button{min-height:40px !important} }
+
+/* סרגל הלשוניות דביק — גלילה אל פאנל או כותרת לא תסתיר אותם מתחתיו (10/11/2026) */
+html{scroll-padding-top:96px}
+@media (max-width:600px){ html{scroll-padding-top:80px} }
 </style>
 
 <div class="app" id="app" dir="rtl" lang="he" data-tab="a">
@@ -899,7 +903,8 @@ function paintCols(m, W) {
   const y0 = top + 20, yB = top + H, Y = lin(nt.lo, nt.hi, yB, y0), fmt = m.fmt || f0;
   nt.ticks.forEach(t => { svg.append(s("line", { x1: padL, x2: W - padR, y1: Y(t), y2: Y(t), stroke: t === 0 ? COL["ink-2"] : COL.hair }));
     svg.append(tx(padL - 6, Y(t), (m.axisFmt || axisNum)(t), { anchor: "right", size: 11, fill: COL["ink-3"], num: true, rtl: false })); });
-  const anySel = rows.some(r => r.sel);
+  const anySel = !m.noFade && rows.some(r => r.sel);
+  const stag = rows.some(r => mw(r.label, 11, 700) > cw - 6);   /* תוויות קצרות (שנים) — בלי דירוג לסירוגין */
   rows.forEach((r, i) => {
     const cx = W - padR - (i + 0.5) * cw, g = s("g", {});
     g.append(s("rect", { class: "hl", x: cx - cw / 2 + 1, y: y0 - 18, width: cw - 2, height: yB - y0 + 18 + 32, rx: 4,
@@ -911,7 +916,7 @@ function paintCols(m, W) {
       (m.refs || []).forEach(rf => { if (ok(rf.v) && Math.abs(vy - Y(rf.v)) < 9) vy = Y(rf.v) - 10; });
       if (cw >= 36 || r.sel) (svg._late = svg._late || []).push(tx(cx, vy, r.vt || fmt(r.v), { size: 11, weight: r.sel ? 700 : 600, num: true, rtl: false, fill: COL.ink, halo: true }));
     }
-    const ly = yB + 12 + (i % 2) * 14;
+    const ly = yB + 12 + (stag ? (i % 2) * 14 : 0);
     g.append(tx(cx, ly, fit(r.label, cw * 2 - 6, 11, r.sel ? 700 : 400), { size: 11, weight: r.sel ? 700 : 400, fill: r.sel ? COL.ink : COL["ink-2"] }));
     bindTip(g, r.label, r.tipR || [["ערך", fmt(r.v)]]);
     svg.append(g);
@@ -1283,7 +1288,7 @@ function panel(P) {
     body.append(h("button", { class: "skip", type: "button", onclick: () => { const b = el.querySelector(".p-foot .btn"); if (b) b.focus(); } }, "דלג על הגרף"), box);
     const plainT = t => String(t).replace(/<[^>]+>/g, "").replace(/[\u2066-\u2069]/g, "");
     DRAW.push(() => { const W = Math.max(280, Math.floor(box.clientWidth)); const svg = P.model(W);
-      svg.setAttribute("aria-label", plainT(P.head) + (P.take ? ". " + plainT(P.take) : "") + ariaVals(P.table)); box.replaceChildren(svg); }); }
+      svg.setAttribute("aria-label", plainT(P.head) + (P.take ? ". " + plainT(P.take).replace(/\.\s*$/, "") : "") + ariaVals(P.table)); box.replaceChildren(svg); }); }
   if (P.after) body.append(P.after);
   if (P.sub) body.append(h("p", { class: "p-det", html: P.sub }));
   el.append(body);
@@ -1659,6 +1664,25 @@ function tabC() {
     { k: `מספר המעסיקים · ${y}`, v: f0(T[y].emp), n: `מהם ${N(f0(T[y].e3))} עם 50 משרות ומעלה (${N(fP(100 * T[y].e3 / T[y].biz))} מהעסקים)` },
     { k: `מספר המשרות בעסקי האשכול · ${y}`, v: f0(T[y].jobs), n: y === J0 ? "שנת הבסיס · משרות, לא אנשים"
       : `${N(fP(100 * T[y].jobs / T[J0].jobs))} מרמת ${J0} · משרות, לא אנשים${JN.includes(y) ? ` · בארץ ${N(fS(100 * (natX(y) / natX(J0) - 1)))}, באשכול ${N(fS(100 * (hereX(y) / hereX(J0) - 1)))} (בלי שירותי ניהול ותמיכה)` : ""}` }];
+
+  /* פאנל 0 · עסקים פעילים לאורך זמן (סדרה שמגיעה עד 2025 — התקן §6.4) */
+  const LL = LY[LY.length - 1];
+  const yG = LY.map((yy, i) => i ? 100 * (LTOT.values[yy] / LTOT.values[LY[i - 1]] - 1) : null);
+  const totG = 100 * (LTOT.values[LL] / LTOT.values[LY0] - 1);
+  const minI = yG.reduce((b, g, i) => g != null && (b < 0 || g < yG[b]) ? i : b, -1), lastG = yG[yG.length - 1];
+  const t0 = `מספר העסקים גדל ב-${N(fP(totG))} מ-${LY0}; ב-${LY[minI]} ${yG[minI] < 2 ? "כמעט נעצר" : "הצמיחה הואטה"} (${N(fS(yG[minI]))})`
+    + (LY[minI] !== LL && lastG > yG[minI] ? `, ב-${LL} חזר לצמוח (${N(fS(lastG))}).` : ".");
+  out.panels.push({ id: "bizTrend", full: true, slug: "active-businesses",
+    head: `עסקים פעילים באשכול · ${rng(LY0, LL)}`, meta: "מרשם העסקים · עסקים פעילים · מספר עסקים", take: t0,
+    sub: `העמודה המודגשת: ${y} — השנה שבבורר. השינוי משנה לשנה — בחלונית של כל עמודה.`,
+    model: W => paintCols({ label: "", noFade: true, h: 230, fmt: f0,
+      rows: LY.slice().reverse().map(yy => { const i = LY.indexOf(yy);
+        return { label: yy, v: LTOT.values[yy], sel: yy === y, color: COL["src-biz"], vt: f0(LTOT.values[yy]),
+          tipR: [["עסקים פעילים", f0(LTOT.values[yy])]].concat(i ? [[`שינוי מ-${LY[i - 1]}`, fS(yG[i])]] : []) }; }) }, W),
+    table: { cols: [{ k: "y", label: "שנה" }, { k: "v", label: "עסקים פעילים", num: true, fmt: f0, dec: 0 }, { k: "g", label: "שינוי מהשנה הקודמת (%)", num: true, fmt: fS, dec: 1 }],
+      rows: LY.map((yy, i) => ({ y: yy, v: LTOT.values[yy], g: yG[i] })) },
+    caveat: `${rng(LY0, BL.unverified[BL.unverified.length - 1])} משליפה קודמת של הלמ"ס מאותו מרשם — אותה הגדרה, נבדק מול המקור.`,
+    source: SRCLINE.c(rng(LY0, LL)), cm: { y: rng(LY0, LL), p: "עסקים פעילים" } });
 
   /* פאנל 1 · במה המגזר העסקי שונה */
   const L1 = loc("conc", { base: "national", meas: "pp" });
